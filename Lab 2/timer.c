@@ -4,89 +4,12 @@
 #include <stdint.h>
 
 #include "i8254.h"
+#include "timer_user.h"
 
-/*
- * Reason: Less loc(prevents switch cases and ambiguous code)
- * Used to select the I/O port of timer N
- * NOTE: developer must ensure 0 < n < 2
- */
-#define TIMER_N(n) (TIMER_0 + n)
+// Hook id to be used when subscribing a timer interrupt
+int timerHookID = 1;
 
-/*
- * Reason: Less loc(prevents switch cases and ambiguous code)
- * Used to get the correct the selection bits
- * of timer N
- * NOTE: as TIMER_N it doesn't check if the timer
- * id is correct
- */
-#define TIMER_SELN(n) (n << 6)
-
-/*
- * Reason: Code reusability
- * Checks if the given timer is between 0 and 2
- * returns TIMER_OUT_RANGE if requirements not met
- */
-#define CHECK_TIMER_RANGE(timer_id) \
-    if(timer_id > 2) { \
-        printf("(%s) Timer range must be between 0 and 2! %d given\n", __func__, timer_id); \
-        return TIMER_OUT_RANGE; \
-    }
-
-/*
- * Reason: Code reusability
- * Performs sys_outb in a safe manner
- * prints a message in case of error and return TIMER_OUTB_FAILED
- */
-#define SYS_OUTB_SAFE(res, message, arg1, arg2) \
-    if((res = sys_outb(arg1, arg2)) != OK) { \
-        printf("(%s) sys_outb failed (%s): %d\n", __func__, message, res); \
-        return TIMER_OUTB_FAILED; \
-    }
-
-/*
- * Reason: Code reusability
- * Performs sys_inb in a safe manner
- * prints a message in case of error and return TIMER_INB_FAILED
- */
-#define SYS_INB_SAFE(res, message, arg1, arg2) \
-    if((res = sys_inb(arg1, arg2)) != OK) { \
-        printf("(%s) sys_inb failed (%s): %d\n", __func__, message, res); \
-        return TIMER_INB_FAILED; \
-    }
-
-#define UINT16_T_MAX (uint16_t)0xFFFF
-#define TIMER_MAX_FREQ TIMER_FREQ
-#define TIMER_MIN_FREQ (uint16_t)TIMER_FREQ/UINT16_T_MAX + (((uint16_t)TIMER_FREQ % UINT16_T_MAX) ? 1 : 0)
-
-typedef enum _timer_status{
-    TIMER_OK = OK,
-    TIMER_OUT_RANGE,
-
-    /*out of bounds error*/
-    TIMER_FREQ_TOO_LOW,
-    TIMER_FREQ_TOO_HIGH,
-
-    /*sys_* failed*/
-    TIMER_OUTB_FAILED,
-    TIMER_INB_FAILED,
-
-    /*util_* failed*/
-    TIMER_UTIL_FAILED,
-
-    /*arguments (timer not included) are not valid*/
-    TIMER_INVALID_ARGS,
-
-    /*lcf returned an error*/
-    TIMER_LCF_ERROR,
-
-    /*kernel call functions failed*/
-    TIMER_INT_SUB_FAILED,
-    TIMER_INT_UNSUB_FAILED
-
-} timer_status;
-
-
-int timerHookID = 31;
+// Counts the number of interrupts
 unsigned int timerIntCounter = 0;
 
 int (timer_set_frequency)(uint8_t timer, uint32_t freq) {
@@ -100,18 +23,15 @@ int (timer_set_frequency)(uint8_t timer, uint32_t freq) {
      * TIMER_FREQ/divisisor = freq, this means that
      * divisor = TIMER_FREQ/freq
      */
-
-    //When freq > TIMER_FREQ then TIMER_FREQ/freq = 0 because we're performing integer division, lets avoid that case
+    
+    // Check if freq is within acceptable limits
     if (freq > TIMER_MAX_FREQ){
         printf("(%s) freq is higher than TIMER_FREQ\n", __func__);
         return TIMER_FREQ_TOO_HIGH;
     }
 
-    //LSB and MSB are 8bits each, so that means the divisor is 16 bit, the maximum value that an unsigned 16 bit int
-    //can hold is 2^16 - 1 = 65535. TIMER_FREQ / 65535 = 18.2067902647. Since we're performing integer division
-    //the minimum is obtained by rounding up, 19.
     if (freq < TIMER_MIN_FREQ){
-        printf("(%s) freq cant be lower than 19", __func__);
+        printf("(%s) freq cant be lower than %d", __func__, TIMER_MIN_FREQ);
         return TIMER_FREQ_TOO_LOW;
     }
 
@@ -126,9 +46,8 @@ int (timer_set_frequency)(uint8_t timer, uint32_t freq) {
     if( (res = timer_get_conf(timer, &previousConfig)) != TIMER_OK)
         return res;
 
-    //Build the control word, maintaining the 4 last bits
-    uint8_t controlWord = 0;
-    controlWord |= TIMER_SELN(timer) | TIMER_LSB_MSB | (previousConfig & (BIT(3) | BIT(2) | BIT(1) | BIT(0)));
+    // Build the control word, maintaining the 4 last bits
+    uint8_t controlWord = TIMER_SELN(timer) | TIMER_LSB_MSB | (previousConfig & (BIT(3) | BIT(2) | BIT(1) | BIT(0)));
 
     // Write control word to control register
     SYS_OUTB_SAFE(res, "writting control word", TIMER_CTRL, controlWord);
@@ -141,7 +60,6 @@ int (timer_set_frequency)(uint8_t timer, uint32_t freq) {
      * Since the timer uses two 8 bit registers, we need to separate the 16 bit
      * value in two, thus the separation in LSB and MSB
      */
-
     if(util_get_LSB(divisor, &lsb) != OK){
         printf("(%s) util_get_LSB: failed reading lsb\n", __func__);
         return TIMER_UTIL_FAILED;
@@ -163,12 +81,13 @@ int (timer_set_frequency)(uint8_t timer, uint32_t freq) {
 
 int (timer_subscribe_int)(uint8_t *bit_no) {
     
+    // Check null pointer
     if(bit_no == NULL){
         printf("(%s) bit_no is NULL\n", __func__);
         return TIMER_INVALID_ARGS;
     }
 
-    //Return, via the argument, the bit number that will be set in msg.m_notify.interrupts
+    // Return, via the argument, the bit number that will be set in msg.m_notify.interrupts
     *bit_no = timerHookID;
 
     // Subscribe a notification on every interrupt in the specified timer's IRQ line
@@ -195,13 +114,12 @@ int (timer_unsubscribe_int)() {
 }
 
 /*
- * Although the current implementation works with uint8_t which max value is 255
+ * Although the current implementation works with uint8_t, whose max value is 255,
  * timerIntCounter can easily hold 60 times that. The problem arises when bigger
- * values are used, they can cause a overflow, thus by limiting the counter to 0-59
+ * values are used, which can cause an overflow. Thus, by limiting the counter to 0-59,
  * we guarantee it works for any period of time
  */
 void (timer_int_handler)() {
-    //Increment the timer interruption counter global variable
     timerIntCounter = (timerIntCounter+1) % 60;
 }
 
@@ -209,17 +127,18 @@ int (timer_get_conf)(uint8_t timer, uint8_t *st) {
     
     CHECK_TIMER_RANGE(timer);
 
-    //Used to hold the result of any operation
+    // Used to hold the result of any operation
     uint8_t res = 0;
-
+    
+    // Check null pointer
     if(st == NULL){
         printf("(%s) st is NULL\n", __func__);
         return TIMER_INVALID_ARGS;
     }
 
     uint8_t readbackC = 0;
-    //Define the control word has a read back command
-    //Set the appropriate timer and set not to read the count
+    // Define the control word has a read back command
+    // Set the appropriate timer and set not to read the count
     readbackC |= (TIMER_RB_CMD | TIMER_RB_SEL(timer) | TIMER_RB_COUNT_);
 
     // Write Read-Back command to Control Register
@@ -240,7 +159,7 @@ int (timer_display_conf)(uint8_t timer, uint8_t st,
     	
     CHECK_TIMER_RANGE(timer);
 
-    //Used to hold the result of any operation
+    // Used to hold the result of any operation
     uint8_t res = 0;
 
     union timer_status_field_val timerStatus;
@@ -250,12 +169,17 @@ int (timer_display_conf)(uint8_t timer, uint8_t st,
             timerStatus.byte = st;
             break;
         case initial:
-            //Gets the register selection bits and converts them to timer_init by shifting them to the least
-            //significant bits
+            // Gets the register selection bits and converts them to timer_init by shifting them to the least
+            // significant bits
             timerStatus.in_mode = (st & TIMER_LSB_MSB) >> 4;
             break;
         case mode:
             timerStatus.count_mode = (st & (BIT(3) | BIT(2) | BIT(1))) >> 1;
+
+            // LCF generates with test 0 generates bogus status bytes
+            // and only prints if the dont care bit is 0
+            if(timerStatus.count_mode > 5)
+                timerStatus.count_mode &= (uint8_t)(~BIT(2));
             break;
         case base:
             timerStatus.bcd = (st & BIT(0));	
