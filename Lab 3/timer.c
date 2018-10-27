@@ -5,6 +5,7 @@
 
 #include "i8254.h"
 #include "timer_user.h"
+#include "timer_extra.h"
 
 // Hook id to be used when subscribing a timer interrupt
 int timerHookID = 1;
@@ -197,3 +198,5 @@ int (timer_display_conf)(uint8_t timer, uint8_t st,
 
     return TIMER_OK;
 }
+
+void timer_reset_int_counter() { timerIntCounter = 0; }

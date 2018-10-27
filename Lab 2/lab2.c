@@ -126,7 +126,8 @@ int(util_get_LSB)(uint16_t val, uint8_t *lsb) {
     if(lsb == NULL)
         return 1;
 
-    *lsb = (uint8_t) (0x00ff & val);
+    // Downcasting discards MSB
+    *lsb = (uint8_t)val;
     return OK;
 }
 
@@ -135,6 +136,7 @@ int(util_get_MSB)(uint16_t val, uint8_t *msb) {
     if(msb == NULL)
         return 1;
 
-    *msb = (uint8_t) ((0xff00 & val)>>8);
+    // Shift the MSB to the LSB and downcast to remove the new MSB
+    *msb = (uint8_t) (val>>8);
     return OK;
 }
