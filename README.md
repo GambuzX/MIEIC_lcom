@@ -8,10 +8,13 @@ In each Lab we were assigned a different **peripheral** to work it, respectively
 * **Mouse**
 * **Video card**
 
+The final project we developed can be seen [here](https://github.com/GambuzX/WaffleLib-ChocoTab "LCOM Final Project").
+
 #### Lab 2 Grade: ?
 #### Lab 3 Grade: ?
 #### Lab 4 Grade: ?
 #### Lab 5 Grade: ?
+#### Project Grade: ?
 
 #### Final Grade: ?
 
