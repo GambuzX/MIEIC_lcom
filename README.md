@@ -10,13 +10,8 @@ In each Lab we were assigned a different **peripheral** to work it, respectively
 
 The final project we developed can be seen [here](https://github.com/GambuzX/WaffleLib "LCOM Final Project").
 
-#### Lab 2 Grade: ?
-#### Lab 3 Grade: ?
-#### Lab 4 Grade: ?
-#### Lab 5 Grade: ?
-#### Project Grade: ?
-
-#### Final Grade: ?
+#### Project Grade: 20
+#### Final Grade: 19
 
 ### Technologies Used
 * C
